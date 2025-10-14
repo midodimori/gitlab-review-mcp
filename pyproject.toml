@@ -1,0 +1,54 @@
+[project]
+name = "gitlab-review-mcp"
+version = "0.1.0"
+description = "A Model Context Protocol (MCP) server implementation"
+readme = "README.md"
+requires-python = ">=3.13"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Minh DOAN", email = "nhatminh.doan2702@gmail.com"}
+]
+keywords = ["mcp", "model-context-protocol", "server"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "fastmcp>=2.10.6",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.8.5",
+    "python-dotenv>=1.1.1",
+    "python-gitlab>=4.13.0",
+]
+
+[project.scripts]
+gitlab-review-mcp = "gitlab_review_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.optional-dependencies]
+dev = [
+    "black>=25.1.0",
+    "isort>=6.0.1",
+    "mypy>=1.17.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-mock>=3.14.1",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.12.5",
+    "mcp[cli]>=1.12.2",
+    "python-dotenv>=1.1.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/midodimori/gitlab-review-mcp"
+Repository = "https://github.com/midodimori/gitlab-review-mcp"
+Issues = "https://github.com/midodimori/gitlab-review-mcp/issues"
+Documentation = "https://github.com/midodimori/gitlab-review-mcp#readme"
