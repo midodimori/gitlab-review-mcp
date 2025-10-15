@@ -174,25 +174,36 @@ uv run gitlab-review-mcp --transport http --port 8000
 
 ### Project Management
 
-#### `list_projects`
-List available GitLab projects with optional filtering.
+#### `search_projects`
+Search for GitLab projects by keyword with pagination support.
+
+**Search Capabilities:**
+- Performs substring matching across project name, path, namespace, and description
+- **Note**: Does not support regex or exact matching - simple keyword search only
+
 - **Parameters**:
-  - `search` (optional) - Filter projects by name
+  - `search` (required) - Search keyword for substring matching
   - `owned` (optional) - Only show owned projects (default: `false`)
   - `membership` (optional) - Only show projects you're a member of (default: `true`)
-- **Returns**: Formatted list of projects with ID, name, description, URL, and default branch
+  - `page` (optional) - Page number for pagination (default: `1`)
+  - `per_page` (optional) - Results per page (default: `20`, max: `100`)
+  - `order_by` (optional) - Sort by: `id`, `name`, `created_at`, `star_count`, `last_activity_at` (default)
+  - `sort` (optional) - Sort order: `asc` or `desc` (default)
+- **Returns**: Formatted list of projects with ID, name, description, URL, default branch, and pagination info
 
 ### Merge Request Operations
 
 #### `list_merge_requests`
-List merge requests for a specific project.
+List merge requests for a specific project with pagination support.
 - **Parameters**:
   - `project_id` (required) - GitLab project ID
   - `state` (optional) - Filter by state: `opened`, `closed`, `merged`, `all`
   - `author_id` (optional) - Filter by author user ID
   - `assignee_id` (optional) - Filter by assignee user ID
-  - `labels` (optional) - Filter by label names (list)
-- **Returns**: Formatted list of MRs with IID, title, state, author, branches, and URLs
+  - `labels` (optional) - Filter by label names (comma-separated)
+  - `page` (optional) - Page number for pagination (default: `1`)
+  - `per_page` (optional) - Results per page (default: `20`, max: `100`)
+- **Returns**: Formatted list of MRs with IID, title, state, author, branches, URLs, and pagination info
 
 #### `get_merge_request`
 Fetch detailed merge request information.
@@ -202,11 +213,13 @@ Fetch detailed merge request information.
 - **Returns**: MR details including title, description, state, branches, author, and timestamps
 
 #### `get_merge_request_diffs`
-Get code changes (diffs) for a merge request.
+Get code changes (diffs) for a merge request with pagination support.
 - **Parameters**:
   - `project_id` (required) - GitLab project ID
   - `mr_iid` (required) - Merge request IID
-- **Returns**: Complete diff information including file paths, commit SHAs, and code changes
+  - `page` (optional) - Page number for pagination (default: `1`)
+  - `per_page` (optional) - Results per page (default: `20`, max: `100`)
+- **Returns**: Complete diff information including file paths, commit SHAs, code changes, and pagination info
 
 #### `add_merge_request_comment`
 Add a general comment to a merge request.
@@ -231,18 +244,22 @@ Add a line-specific comment to merge request code.
 - **Returns**: Confirmation with discussion ID and comment details
 
 #### `get_merge_request_comments`
-Get all comments and discussions from a merge request, including suggestions.
+Get all comments and discussions from a merge request, including suggestions, with pagination support.
 - **Parameters**:
   - `project_id` (required) - GitLab project ID
   - `mr_iid` (required) - Merge request IID
-- **Returns**: All comments with note IDs, discussion IDs, authors, timestamps, and embedded suggestions
+  - `page` (optional) - Page number for pagination (default: `1`)
+  - `per_page` (optional) - Results per page (default: `20`, max: `100`)
+- **Returns**: All comments with note IDs, discussion IDs, authors, timestamps, embedded suggestions, and pagination info
 
 #### `get_merge_request_commits`
-Get all commits in a merge request.
+Get all commits in a merge request with pagination support.
 - **Parameters**:
   - `project_id` (required) - GitLab project ID
   - `mr_iid` (required) - Merge request IID
-- **Returns**: List of commits with SHA, title, message, author, and timestamps
+  - `page` (optional) - Page number for pagination (default: `1`)
+  - `per_page` (optional) - Results per page (default: `20`, max: `100`)
+- **Returns**: List of commits with SHA, title, message, author, timestamps, and pagination info
 
 #### `update_merge_request_comment`
 Update an existing merge request comment.
@@ -339,10 +356,6 @@ make help
 
 ```
 gitlab-review-mcp/
-├── .github/
-│   └── workflows/
-│       ├── publish.yml            # PyPI publishing workflow
-│       └── test.yml               # CI tests workflow
 ├── src/gitlab_review_mcp/
 │   ├── __init__.py
 │   ├── server.py                  # MCP server implementation
@@ -359,10 +372,8 @@ gitlab-review-mcp/
 ├── tests/
 │   ├── __init__.py
 │   ├── test_server.py             # Tool function tests with mocks
+│   ├── test_pagination.py         # Pagination-specific tests
 │   └── test_mcp_integration.py    # MCP integration tests
-├── .env.example
-├── .gitignore
-├── .python-version
 ├── LICENSE
 ├── Makefile
 ├── PUBLISHING.md                  # Publishing guide

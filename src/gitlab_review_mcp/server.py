@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 mcp: FastMCP = FastMCP("Gitlab Review MCP")
 
 # Register GitLab tools
-mcp.tool()(gitlab_tools.list_projects)
+mcp.tool()(gitlab_tools.search_projects)
 mcp.tool()(gitlab_tools.list_merge_requests)
 mcp.tool()(gitlab_tools.get_merge_request)
 mcp.tool()(gitlab_tools.get_merge_request_diffs)

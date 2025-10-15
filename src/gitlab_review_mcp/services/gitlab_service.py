@@ -53,33 +53,47 @@ class GitLabService:
             self._initialize_client()
         return cast(gitlab.Gitlab, self._client)
 
-    async def list_projects(
+    async def search_projects(
         self,
-        search: Optional[str] = None,
+        search: str,
         owned: bool = False,
         membership: bool = True,
-    ) -> List[Dict[str, Any]]:
+        page: int = 1,
+        per_page: int = 20,
+        order_by: str = "last_activity_at",
+        sort: str = "desc",
+    ) -> Dict[str, Any]:
         """
-        List GitLab projects.
+        Search GitLab projects with pagination.
 
         Args:
-            search: Optional search string to filter projects
+            search: Search string to filter projects (required)
             owned: Only return projects owned by the authenticated user
             membership: Only return projects the user is a member of
+            page: Page number for pagination
+            per_page: Number of results per page (max 100)
+            order_by: Sort by field (id, name, created_at, star_count, last_activity_at)
+            sort: Sort order (asc, desc)
 
         Returns:
-            List of project dictionaries with basic information
+            Dictionary with projects list and pagination metadata
         """
         try:
-            params: Dict[str, Any] = {"membership": membership, "owned": owned}
-            if search:
-                params["search"] = search
+            params: Dict[str, Any] = {
+                "membership": membership,
+                "owned": owned,
+                "search": search,
+                "page": page,
+                "per_page": min(per_page, 100),
+                "order_by": order_by,
+                "sort": sort,
+            }
 
-            projects = self.client.projects.list(get_all=True, **params)
+            projects = self.client.projects.list(**params)
 
-            result = []
+            result_projects = []
             for project in projects:
-                result.append(
+                result_projects.append(
                     {
                         "id": project.id,
                         "name": project.name,
@@ -91,14 +105,30 @@ class GitLabService:
                     }
                 )
 
-            logger.info(f"Found {len(result)} projects")
-            return result
+            total = (
+                projects.total if hasattr(projects, "total") else len(result_projects)
+            )
+            total_pages = (
+                projects.total_pages if hasattr(projects, "total_pages") else 1
+            )
+
+            logger.info(
+                f"Found {len(result_projects)} projects on page {page} (total: {total})"
+            )
+
+            return {
+                "projects": result_projects,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": total_pages,
+            }
 
         except GitlabError as e:
             logger.error(f"GitLab API error: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error listing projects: {e}")
+            logger.error(f"Unexpected error searching projects: {e}")
             raise
 
     async def list_merge_requests(
@@ -108,9 +138,11 @@ class GitLabService:
         author_id: Optional[int] = None,
         assignee_id: Optional[int] = None,
         labels: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        page: int = 1,
+        per_page: int = 20,
+    ) -> Dict[str, Any]:
         """
-        List merge requests for a project.
+        List merge requests for a project with pagination.
 
         Args:
             project_id: Project ID
@@ -118,14 +150,19 @@ class GitLabService:
             author_id: Filter by author ID
             assignee_id: Filter by assignee ID
             labels: Comma-separated label names
+            page: Page number for pagination
+            per_page: Number of results per page (max 100)
 
         Returns:
-            List of merge request dictionaries
+            Dictionary with merge requests list and pagination metadata
         """
         try:
             project = self.client.projects.get(project_id)
 
-            params: Dict[str, Any] = {}
+            params: Dict[str, Any] = {
+                "page": page,
+                "per_page": min(per_page, 100),
+            }
             if state:
                 params["state"] = state
             if author_id:
@@ -135,11 +172,11 @@ class GitLabService:
             if labels:
                 params["labels"] = labels
 
-            mrs = project.mergerequests.list(get_all=True, **params)
+            mrs = project.mergerequests.list(**params)
 
-            result = []
+            result_mrs = []
             for mr in mrs:
-                result.append(
+                result_mrs.append(
                     {
                         "id": mr.id,
                         "iid": mr.iid,
@@ -155,8 +192,20 @@ class GitLabService:
                     }
                 )
 
-            logger.info(f"Found {len(result)} merge requests in project {project_id}")
-            return result
+            total = mrs.total if hasattr(mrs, "total") else len(result_mrs)
+            total_pages = mrs.total_pages if hasattr(mrs, "total_pages") else 1
+
+            logger.info(
+                f"Found {len(result_mrs)} merge requests on page {page} in project {project_id} (total: {total})"
+            )
+
+            return {
+                "merge_requests": result_mrs,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": total_pages,
+            }
 
         except GitlabError as e:
             logger.error(f"GitLab API error: {e}")
@@ -206,23 +255,25 @@ class GitLabService:
             raise
 
     async def get_merge_request_diffs(
-        self, project_id: int, mr_iid: int
-    ) -> List[Dict[str, Any]]:
+        self, project_id: int, mr_iid: int, page: int = 1, per_page: int = 20
+    ) -> Dict[str, Any]:
         """
-        Get merge request diffs.
+        Get merge request diffs with pagination.
 
         Args:
             project_id: Project ID
             mr_iid: Merge request IID
+            page: Page number for pagination
+            per_page: Number of results per page (max 100)
 
         Returns:
-            List of diff dictionaries
+            Dictionary with diffs list and pagination metadata
         """
         try:
             project = self.client.projects.get(project_id)
             mr = project.mergerequests.get(mr_iid)
 
-            diffs = mr.diffs.list(get_all=True)
+            diffs = mr.diffs.list(page=page, per_page=min(per_page, 100))
 
             result = []
             for diff in diffs:
@@ -254,8 +305,20 @@ class GitLabService:
 
                 result.append(diff_data)
 
-            logger.info(f"Retrieved {len(result)} diffs for MR !{mr_iid}")
-            return result
+            total = diffs.total if hasattr(diffs, "total") else len(result)
+            total_pages = diffs.total_pages if hasattr(diffs, "total_pages") else 1
+
+            logger.info(
+                f"Retrieved {len(result)} diffs on page {page} for MR !{mr_iid} (total: {total})"
+            )
+
+            return {
+                "diffs": result,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": total_pages,
+            }
 
         except GitlabError as e:
             logger.error(f"GitLab API error: {e}")
@@ -265,23 +328,25 @@ class GitLabService:
             raise
 
     async def get_merge_request_comments(
-        self, project_id: int, mr_iid: int
-    ) -> List[Dict[str, Any]]:
+        self, project_id: int, mr_iid: int, page: int = 1, per_page: int = 20
+    ) -> Dict[str, Any]:
         """
         Get all comments/discussions from a merge request, including suggestions.
 
         Args:
             project_id: Project ID
             mr_iid: Merge request IID
+            page: Page number for pagination
+            per_page: Number of results per page (max 100)
 
         Returns:
-            List of comment dictionaries with note and discussion IDs, including suggestions
+            Dictionary with comments list and pagination metadata
         """
         try:
             project = self.client.projects.get(project_id)
             mr = project.mergerequests.get(mr_iid)
 
-            discussions = mr.discussions.list(get_all=True)
+            discussions = mr.discussions.list(page=page, per_page=min(per_page, 100))
 
             comments = []
             for discussion in discussions:
@@ -321,10 +386,24 @@ class GitLabService:
 
                     comments.append(comment_data)
 
-            logger.info(
-                f"Retrieved {len(comments)} comments from MR !{mr_iid} in project {project_id}"
+            total = (
+                discussions.total if hasattr(discussions, "total") else len(comments)
             )
-            return comments
+            total_pages = (
+                discussions.total_pages if hasattr(discussions, "total_pages") else 1
+            )
+
+            logger.info(
+                f"Retrieved {len(comments)} comments on page {page} from MR !{mr_iid} in project {project_id} (total: {total})"
+            )
+
+            return {
+                "comments": comments,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": total_pages,
+            }
 
         except GitlabError as e:
             logger.error(f"GitLab API error: {e}")
@@ -334,44 +413,86 @@ class GitLabService:
             raise
 
     async def get_merge_request_commits(
-        self, project_id: int, mr_iid: int
-    ) -> List[Dict[str, Any]]:
+        self, project_id: int, mr_iid: int, page: int = 1, per_page: int = 20
+    ) -> Dict[str, Any]:
         """
-        Get merge request commits.
+        Get merge request commits with pagination.
 
         Args:
             project_id: Project ID
             mr_iid: Merge request IID
+            page: Page number for pagination
+            per_page: Number of results per page (max 100)
 
         Returns:
-            List of commit dictionaries
+            Dictionary with commits list and pagination metadata
         """
         try:
             project = self.client.projects.get(project_id)
             mr = project.mergerequests.get(mr_iid)
 
-            commits = mr.commits()
+            commits_data = mr.commits(page=page, per_page=min(per_page, 100))
 
-            result = []
-            for commit in commits:
-                result.append(
-                    {
-                        "id": commit.get("id"),
-                        "short_id": commit.get("short_id"),
-                        "title": commit.get("title"),
-                        "message": commit.get("message"),
-                        "author_name": commit.get("author_name"),
-                        "author_email": commit.get("author_email"),
-                        "authored_date": commit.get("authored_date"),
-                        "committer_name": commit.get("committer_name"),
-                        "committer_email": commit.get("committer_email"),
-                        "committed_date": commit.get("committed_date"),
-                        "web_url": commit.get("web_url"),
-                    }
+            result_commits = []
+            if isinstance(commits_data, list):
+                for commit in commits_data:
+                    result_commits.append(
+                        {
+                            "id": getattr(commit, "id", None),
+                            "short_id": getattr(commit, "short_id", None),
+                            "title": getattr(commit, "title", None),
+                            "message": getattr(commit, "message", None),
+                            "author_name": getattr(commit, "author_name", None),
+                            "author_email": getattr(commit, "author_email", None),
+                            "authored_date": getattr(commit, "authored_date", None),
+                            "committer_name": getattr(commit, "committer_name", None),
+                            "committer_email": getattr(commit, "committer_email", None),
+                            "committed_date": getattr(commit, "committed_date", None),
+                            "web_url": getattr(commit, "web_url", None),
+                        }
+                    )
+                total = len(result_commits)
+                total_pages = 1
+            else:
+                for commit in commits_data:
+                    result_commits.append(
+                        {
+                            "id": getattr(commit, "id", None),
+                            "short_id": getattr(commit, "short_id", None),
+                            "title": getattr(commit, "title", None),
+                            "message": getattr(commit, "message", None),
+                            "author_name": getattr(commit, "author_name", None),
+                            "author_email": getattr(commit, "author_email", None),
+                            "authored_date": getattr(commit, "authored_date", None),
+                            "committer_name": getattr(commit, "committer_name", None),
+                            "committer_email": getattr(commit, "committer_email", None),
+                            "committed_date": getattr(commit, "committed_date", None),
+                            "web_url": getattr(commit, "web_url", None),
+                        }
+                    )
+                total = (
+                    int(commits_data.total)
+                    if hasattr(commits_data, "total") and commits_data.total is not None
+                    else len(result_commits)
+                )
+                total_pages = (
+                    int(commits_data.total_pages)
+                    if hasattr(commits_data, "total_pages")
+                    and commits_data.total_pages is not None
+                    else 1
                 )
 
-            logger.info(f"Retrieved {len(result)} commits for MR !{mr_iid}")
-            return result
+            logger.info(
+                f"Retrieved {len(result_commits)} commits on page {page} for MR !{mr_iid} (total: {total})"
+            )
+
+            return {
+                "commits": result_commits,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": total_pages,
+            }
 
         except GitlabError as e:
             logger.error(f"GitLab API error: {e}")

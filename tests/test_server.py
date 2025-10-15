@@ -7,45 +7,87 @@ import pytest
 from gitlab_review_mcp.server import mcp
 
 
-class TestListProjects:
-    """Tests for list_projects tool."""
+class TestSearchProjects:
+    """Tests for search_projects tool."""
 
     @pytest.mark.asyncio
-    async def test_list_projects_success(self):
-        """Test that list_projects returns formatted project list."""
-        tool_func = mcp._tool_manager._tools["list_projects"].fn
+    async def test_search_projects_success(self):
+        """Test that search_projects returns formatted project list with pagination."""
+        tool_func = mcp._tool_manager._tools["search_projects"].fn
 
         with patch(
-            "gitlab_review_mcp.tools.gitlab_tools._service.list_projects"
-        ) as mock_list:
-            mock_list.return_value = [
-                {
-                    "id": 1,
-                    "name": "Test Project",
-                    "path": "test-project",
-                    "path_with_namespace": "group/test-project",
-                    "description": "A test project",
-                    "web_url": "https://gitlab.com/group/test-project",
-                    "default_branch": "main",
-                }
-            ]
+            "gitlab_review_mcp.tools.gitlab_tools._service.search_projects"
+        ) as mock_search:
+            mock_search.return_value = {
+                "projects": [
+                    {
+                        "id": 1,
+                        "name": "Test Project",
+                        "path": "test-project",
+                        "path_with_namespace": "group/test-project",
+                        "description": "A test project",
+                        "web_url": "https://gitlab.com/group/test-project",
+                        "default_branch": "main",
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 1,
+            }
 
-            result = await tool_func()
+            result = await tool_func(search="test")
             assert isinstance(result, str)
             assert "Test Project" in result
             assert "group/test-project" in result
+            assert "page 1 of 1" in result
 
     @pytest.mark.asyncio
-    async def test_list_projects_empty(self):
-        """Test that list_projects handles no projects."""
-        tool_func = mcp._tool_manager._tools["list_projects"].fn
+    async def test_search_projects_empty(self):
+        """Test that search_projects handles no projects."""
+        tool_func = mcp._tool_manager._tools["search_projects"].fn
 
         with patch(
-            "gitlab_review_mcp.tools.gitlab_tools._service.list_projects"
-        ) as mock_list:
-            mock_list.return_value = []
-            result = await tool_func()
-            assert "No projects found" in result
+            "gitlab_review_mcp.tools.gitlab_tools._service.search_projects"
+        ) as mock_search:
+            mock_search.return_value = {
+                "projects": [],
+                "total": 0,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 0,
+            }
+            result = await tool_func(search="nonexistent")
+            assert "No projects found matching 'nonexistent'" in result
+
+    @pytest.mark.asyncio
+    async def test_search_projects_pagination(self):
+        """Test that search_projects shows pagination info."""
+        tool_func = mcp._tool_manager._tools["search_projects"].fn
+
+        with patch(
+            "gitlab_review_mcp.tools.gitlab_tools._service.search_projects"
+        ) as mock_search:
+            mock_search.return_value = {
+                "projects": [
+                    {
+                        "id": 1,
+                        "name": "Test Project",
+                        "path": "test-project",
+                        "path_with_namespace": "group/test-project",
+                        "description": "A test project",
+                        "web_url": "https://gitlab.com/group/test-project",
+                        "default_branch": "main",
+                    }
+                ],
+                "total": 50,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 3,
+            }
+            result = await tool_func(search="test", page=1)
+            assert "page 1 of 3" in result
+            assert "Use page=2 to see next page" in result
 
 
 class TestListMergeRequests:
@@ -53,32 +95,39 @@ class TestListMergeRequests:
 
     @pytest.mark.asyncio
     async def test_list_merge_requests_success(self):
-        """Test that list_merge_requests returns formatted MR list."""
+        """Test that list_merge_requests returns formatted MR list with pagination."""
         tool_func = mcp._tool_manager._tools["list_merge_requests"].fn
 
         with patch(
             "gitlab_review_mcp.tools.gitlab_tools._service.list_merge_requests"
         ) as mock_list:
-            mock_list.return_value = [
-                {
-                    "id": 100,
-                    "iid": 1,
-                    "title": "Test MR",
-                    "state": "opened",
-                    "merged": False,
-                    "web_url": "https://gitlab.com/group/project/-/merge_requests/1",
-                    "source_branch": "feature",
-                    "target_branch": "main",
-                    "author": "testuser",
-                    "created_at": "2025-01-01T00:00:00Z",
-                    "updated_at": "2025-01-02T00:00:00Z",
-                }
-            ]
+            mock_list.return_value = {
+                "merge_requests": [
+                    {
+                        "id": 100,
+                        "iid": 1,
+                        "title": "Test MR",
+                        "state": "opened",
+                        "merged": False,
+                        "web_url": "https://gitlab.com/group/project/-/merge_requests/1",
+                        "source_branch": "feature",
+                        "target_branch": "main",
+                        "author": "testuser",
+                        "created_at": "2025-01-01T00:00:00Z",
+                        "updated_at": "2025-01-02T00:00:00Z",
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 1,
+            }
 
             result = await tool_func(project_id=1)
             assert isinstance(result, str)
             assert "Test MR" in result
             assert "!1" in result
+            assert "page 1 of 1" in result
 
     @pytest.mark.asyncio
     async def test_list_merge_requests_empty(self):
@@ -88,9 +137,48 @@ class TestListMergeRequests:
         with patch(
             "gitlab_review_mcp.tools.gitlab_tools._service.list_merge_requests"
         ) as mock_list:
-            mock_list.return_value = []
+            mock_list.return_value = {
+                "merge_requests": [],
+                "total": 0,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 0,
+            }
             result = await tool_func(project_id=1)
             assert "No merge requests found" in result
+
+    @pytest.mark.asyncio
+    async def test_list_merge_requests_pagination(self):
+        """Test that list_merge_requests shows pagination info."""
+        tool_func = mcp._tool_manager._tools["list_merge_requests"].fn
+
+        with patch(
+            "gitlab_review_mcp.tools.gitlab_tools._service.list_merge_requests"
+        ) as mock_list:
+            mock_list.return_value = {
+                "merge_requests": [
+                    {
+                        "id": 100,
+                        "iid": 1,
+                        "title": "Test MR",
+                        "state": "opened",
+                        "merged": False,
+                        "web_url": "https://gitlab.com/group/project/-/merge_requests/1",
+                        "source_branch": "feature",
+                        "target_branch": "main",
+                        "author": "testuser",
+                        "created_at": "2025-01-01T00:00:00Z",
+                        "updated_at": "2025-01-02T00:00:00Z",
+                    }
+                ],
+                "total": 45,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 3,
+            }
+            result = await tool_func(project_id=1, page=1)
+            assert "page 1 of 3" in result
+            assert "Use page=2 to see next page" in result
 
 
 class TestGetMergeRequest:
@@ -137,28 +225,34 @@ class TestGetMergeRequestDiffs:
         with patch(
             "gitlab_review_mcp.tools.gitlab_tools._service.get_merge_request_diffs"
         ) as mock_get:
-            mock_get.return_value = [
-                {
-                    "id": "abc123",
-                    "base_commit_sha": "base123",
-                    "head_commit_sha": "head123",
-                    "start_commit_sha": "start123",
-                    "created_at": "2025-01-01T00:00:00Z",
-                    "state": "collected",
-                    "diffs": [
-                        {
-                            "old_path": "test.py",
-                            "new_path": "test.py",
-                            "a_mode": "100644",
-                            "b_mode": "100644",
-                            "new_file": False,
-                            "renamed_file": False,
-                            "deleted_file": False,
-                            "diff": "@@ -1 +1 @@\n-old\n+new",
-                        }
-                    ],
-                }
-            ]
+            mock_get.return_value = {
+                "diffs": [
+                    {
+                        "id": "abc123",
+                        "base_commit_sha": "base123",
+                        "head_commit_sha": "head123",
+                        "start_commit_sha": "start123",
+                        "created_at": "2025-01-01T00:00:00Z",
+                        "state": "collected",
+                        "diffs": [
+                            {
+                                "old_path": "test.py",
+                                "new_path": "test.py",
+                                "a_mode": "100644",
+                                "b_mode": "100644",
+                                "new_file": False,
+                                "renamed_file": False,
+                                "deleted_file": False,
+                                "diff": "@@ -1 +1 @@\n-old\n+new",
+                            }
+                        ],
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 1,
+            }
 
             result = await tool_func(project_id=1, mr_iid=1)
             assert isinstance(result, str)
@@ -234,38 +328,44 @@ class TestGetMergeRequestComments:
 
     @pytest.mark.asyncio
     async def test_get_merge_request_comments_success(self):
-        """Test that get_merge_request_comments returns comments with suggestions."""
+        """Test that get_merge_request_comments returns comments with suggestions and pagination."""
         tool_func = mcp._tool_manager._tools["get_merge_request_comments"].fn
 
         with patch(
             "gitlab_review_mcp.tools.gitlab_tools._service.get_merge_request_comments"
         ) as mock_get:
-            mock_get.return_value = [
-                {
-                    "note_id": 123,
-                    "discussion_id": "abc123",
-                    "author": "testuser",
-                    "created_at": "2025-01-01T00:00:00Z",
-                    "updated_at": "2025-01-01T00:00:00Z",
-                    "body": "Test comment with suggestion",
-                    "system": False,
-                    "resolvable": True,
-                    "resolved": False,
-                    "file_path": "test.py",
-                    "suggestions": [
-                        {
-                            "id": 456,
-                            "from_line": 10,
-                            "to_line": 12,
-                            "from_content": "old code",
-                            "to_content": "new code",
-                            "applicable": True,
-                            "applied": False,
-                            "appliable": True,
-                        }
-                    ],
-                }
-            ]
+            mock_get.return_value = {
+                "comments": [
+                    {
+                        "note_id": 123,
+                        "discussion_id": "abc123",
+                        "author": "testuser",
+                        "created_at": "2025-01-01T00:00:00Z",
+                        "updated_at": "2025-01-01T00:00:00Z",
+                        "body": "Test comment with suggestion",
+                        "system": False,
+                        "resolvable": True,
+                        "resolved": False,
+                        "file_path": "test.py",
+                        "suggestions": [
+                            {
+                                "id": 456,
+                                "from_line": 10,
+                                "to_line": 12,
+                                "from_content": "old code",
+                                "to_content": "new code",
+                                "applicable": True,
+                                "applied": False,
+                                "appliable": True,
+                            }
+                        ],
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 1,
+            }
 
             result = await tool_func(project_id=1, mr_iid=1)
             assert isinstance(result, str)
@@ -281,7 +381,13 @@ class TestGetMergeRequestComments:
         with patch(
             "gitlab_review_mcp.tools.gitlab_tools._service.get_merge_request_comments"
         ) as mock_get:
-            mock_get.return_value = []
+            mock_get.return_value = {
+                "comments": [],
+                "total": 0,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 0,
+            }
             result = await tool_func(project_id=1, mr_iid=1)
             assert "No comments found" in result
 
@@ -291,27 +397,33 @@ class TestGetMergeRequestCommits:
 
     @pytest.mark.asyncio
     async def test_get_merge_request_commits_success(self):
-        """Test that get_merge_request_commits returns commit list."""
+        """Test that get_merge_request_commits returns commit list with pagination."""
         tool_func = mcp._tool_manager._tools["get_merge_request_commits"].fn
 
         with patch(
             "gitlab_review_mcp.tools.gitlab_tools._service.get_merge_request_commits"
         ) as mock_get:
-            mock_get.return_value = [
-                {
-                    "id": "abc123def456",
-                    "short_id": "abc123",
-                    "title": "Test commit",
-                    "message": "Test commit message",
-                    "author_name": "Test User",
-                    "author_email": "test@example.com",
-                    "authored_date": "2025-01-01T00:00:00Z",
-                    "committer_name": "Test User",
-                    "committer_email": "test@example.com",
-                    "committed_date": "2025-01-01T00:00:00Z",
-                    "web_url": "https://gitlab.com/group/project/-/commit/abc123def456",
-                }
-            ]
+            mock_get.return_value = {
+                "commits": [
+                    {
+                        "id": "abc123def456",
+                        "short_id": "abc123",
+                        "title": "Test commit",
+                        "message": "Test commit message",
+                        "author_name": "Test User",
+                        "author_email": "test@example.com",
+                        "authored_date": "2025-01-01T00:00:00Z",
+                        "committer_name": "Test User",
+                        "committer_email": "test@example.com",
+                        "committed_date": "2025-01-01T00:00:00Z",
+                        "web_url": "https://gitlab.com/group/project/-/commit/abc123def456",
+                    }
+                ],
+                "total": 1,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 1,
+            }
 
             result = await tool_func(project_id=1, mr_iid=1)
             assert isinstance(result, str)
@@ -326,7 +438,13 @@ class TestGetMergeRequestCommits:
         with patch(
             "gitlab_review_mcp.tools.gitlab_tools._service.get_merge_request_commits"
         ) as mock_get:
-            mock_get.return_value = []
+            mock_get.return_value = {
+                "commits": [],
+                "total": 0,
+                "page": 1,
+                "per_page": 20,
+                "total_pages": 0,
+            }
             result = await tool_func(project_id=1, mr_iid=1)
             assert "No commits found" in result
 

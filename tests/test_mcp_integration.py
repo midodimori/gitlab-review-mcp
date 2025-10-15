@@ -20,7 +20,7 @@ class TestMCPIntegration:
     def test_all_tools_registered(self):
         """Test that all expected tools are registered with the MCP server."""
         expected_tools = {
-            "list_projects",
+            "search_projects",
             "list_merge_requests",
             "get_merge_request",
             "get_merge_request_diffs",

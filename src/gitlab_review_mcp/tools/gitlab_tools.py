@@ -10,49 +10,78 @@ logger = get_logger(__name__)
 _service = GitLabService()
 
 
-async def list_projects(
-    search: Optional[str] = None,
+async def search_projects(
+    search: str,
     owned: bool = False,
     membership: bool = True,
+    page: int = 1,
+    per_page: int = 20,
+    order_by: str = "last_activity_at",
+    sort: str = "desc",
 ) -> str:
     """
-    List available GitLab projects.
+    Search for GitLab projects by keyword.
+
+    The search performs substring matching across project name, path, namespace, and description.
+    Note: Does not support regex or exact matching - it's a simple keyword search.
 
     Args:
-        search: Optional search string to filter projects by name
+        search: Search keyword (substring match in name/path/namespace/description)
         owned: Only return projects owned by the authenticated user
         membership: Only return projects the user is a member of (default: True)
+        page: Page number for pagination (default: 1)
+        per_page: Number of results per page (default: 20, max: 100)
+        order_by: Sort by field: 'id', 'name', 'created_at', 'star_count', 'last_activity_at' (default)
+        sort: Sort order: 'asc' or 'desc' (default)
 
     Returns:
-        Formatted string with project list
+        Formatted string with project search results including pagination info
     """
     try:
         logger.info(
-            f"Listing projects - search: {search}, owned: {owned}, membership: {membership}"
+            f"Searching projects - query: {search}, owned: {owned}, membership: {membership}, page: {page}"
         )
-        projects = await _service.list_projects(
-            search=search, owned=owned, membership=membership
+        result = await _service.search_projects(
+            search=search,
+            owned=owned,
+            membership=membership,
+            page=page,
+            per_page=per_page,
+            order_by=order_by,
+            sort=sort,
         )
+
+        projects = result["projects"]
+        total = result["total"]
+        current_page = result["page"]
+        total_pages = result["total_pages"]
 
         if not projects:
-            return "No projects found."
+            return f"No projects found matching '{search}'."
 
-        result = [f"Found {len(projects)} projects:\n"]
+        output = [
+            f"Found {total} projects matching '{search}' (page {current_page} of {total_pages}):\n"
+        ]
         for project in projects:
-            result.append(f"- [{project['id']}] {project['path_with_namespace']}")
-            result.append(f"  Name: {project['name']}")
+            output.append(f"- [{project['id']}] {project['path_with_namespace']}")
+            output.append(f"  Name: {project['name']}")
             if project["description"]:
-                result.append(f"  Description: {project['description']}")
-            result.append(f"  URL: {project['web_url']}")
+                output.append(f"  Description: {project['description']}")
+            output.append(f"  URL: {project['web_url']}")
             if project["default_branch"]:
-                result.append(f"  Default branch: {project['default_branch']}")
-            result.append("")
+                output.append(f"  Default branch: {project['default_branch']}")
+            output.append("")
 
-        return "\n".join(result)
+        if total_pages > 1:
+            output.append(f"\nShowing page {current_page} of {total_pages}")
+            if current_page < total_pages:
+                output.append(f"Use page={current_page + 1} to see next page")
+
+        return "\n".join(output)
 
     except Exception as e:
-        logger.error(f"Error listing projects: {e}")
-        return f"Error listing projects: {str(e)}"
+        logger.error(f"Error searching projects: {e}")
+        return f"Error searching projects: {str(e)}"
 
 
 async def list_merge_requests(
@@ -61,6 +90,8 @@ async def list_merge_requests(
     author_id: Optional[int] = None,
     assignee_id: Optional[int] = None,
     labels: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 20,
 ) -> str:
     """
     List merge requests for a specific project.
@@ -71,35 +102,51 @@ async def list_merge_requests(
         author_id: Filter by author user ID
         assignee_id: Filter by assignee user ID
         labels: Comma-separated label names (e.g., "bug,urgent")
+        page: Page number for pagination (default: 1)
+        per_page: Number of results per page (default: 20, max: 100)
 
     Returns:
-        Formatted string with merge request list
+        Formatted string with merge request list including pagination info
     """
     try:
-        logger.info(f"Listing merge requests for project {project_id}")
-        mrs = await _service.list_merge_requests(
+        logger.info(f"Listing merge requests for project {project_id}, page {page}")
+        result = await _service.list_merge_requests(
             project_id=project_id,
             state=state,
             author_id=author_id,
             assignee_id=assignee_id,
             labels=labels,
+            page=page,
+            per_page=per_page,
         )
+
+        mrs = result["merge_requests"]
+        total = result["total"]
+        current_page = result["page"]
+        total_pages = result["total_pages"]
 
         if not mrs:
             return "No merge requests found."
 
-        result = [f"Found {len(mrs)} merge requests:\n"]
+        output = [
+            f"Found {total} merge requests (page {current_page} of {total_pages}):\n"
+        ]
         for mr in mrs:
             merged_str = " (merged)" if mr["merged"] else ""
-            result.append(f"- !{mr['iid']}: {mr['title']}")
-            result.append(f"  State: {mr['state']}{merged_str}")
-            result.append(f"  Author: {mr['author']}")
-            result.append(f"  Branches: {mr['source_branch']} → {mr['target_branch']}")
-            result.append(f"  URL: {mr['web_url']}")
-            result.append(f"  Updated: {mr['updated_at']}")
-            result.append("")
+            output.append(f"- !{mr['iid']}: {mr['title']}")
+            output.append(f"  State: {mr['state']}{merged_str}")
+            output.append(f"  Author: {mr['author']}")
+            output.append(f"  Branches: {mr['source_branch']} → {mr['target_branch']}")
+            output.append(f"  URL: {mr['web_url']}")
+            output.append(f"  Updated: {mr['updated_at']}")
+            output.append("")
 
-        return "\n".join(result)
+        if total_pages > 1:
+            output.append(f"\nShowing page {current_page} of {total_pages}")
+            if current_page < total_pages:
+                output.append(f"Use page={current_page + 1} to see next page")
+
+        return "\n".join(output)
 
     except Exception as e:
         logger.error(f"Error listing merge requests: {e}")
@@ -141,25 +188,41 @@ async def get_merge_request(project_id: int, mr_iid: int) -> str:
         return f"Error getting merge request: {str(e)}"
 
 
-async def get_merge_request_diffs(project_id: int, mr_iid: int) -> str:
+async def get_merge_request_diffs(
+    project_id: int, mr_iid: int, page: int = 1, per_page: int = 20
+) -> str:
     """
     Get merge request diffs showing code changes.
 
     Args:
         project_id: GitLab project ID
         mr_iid: Merge request IID
+        page: Page number for pagination (default: 1)
+        per_page: Number of results per page (default: 20, max: 100)
 
     Returns:
-        Formatted string with diff information
+        Formatted string with diff information including pagination info
     """
     try:
-        logger.info(f"Getting diffs for MR !{mr_iid} from project {project_id}")
-        diffs = await _service.get_merge_request_diffs(project_id, mr_iid)
+        logger.info(
+            f"Getting diffs for MR !{mr_iid} from project {project_id}, page {page}"
+        )
+        result_data = await _service.get_merge_request_diffs(
+            project_id, mr_iid, page=page, per_page=per_page
+        )
+
+        diffs = result_data["diffs"]
+        total = result_data["total"]
+        current_page = result_data["page"]
+        total_pages = result_data["total_pages"]
 
         if not diffs:
             return "No diffs found."
 
-        result = [f"Diffs for Merge Request !{mr_iid}:\n"]
+        result = [
+            f"Diffs for Merge Request !{mr_iid}:\n",
+            f"Total diff versions: {total} (showing page {current_page} of {total_pages})\n",
+        ]
 
         for diff_version in diffs:
             result.append(f"Diff ID: {diff_version['id']}")
@@ -189,6 +252,11 @@ async def get_merge_request_diffs(project_id: int, mr_iid: int) -> str:
                         result.append("  Diff:")
                         result.append(file_diff["diff"])
             result.append("")
+
+        if total_pages > 1:
+            result.append(f"\nShowing page {current_page} of {total_pages}")
+            if current_page < total_pages:
+                result.append(f"Use page={current_page + 1} to see next page")
 
         return "\n".join(result)
 
@@ -436,27 +504,40 @@ async def update_merge_request(
         return f"Error updating merge request: {str(e)}"
 
 
-async def get_merge_request_comments(project_id: int, mr_iid: int) -> str:
+async def get_merge_request_comments(
+    project_id: int, mr_iid: int, page: int = 1, per_page: int = 20
+) -> str:
     """
     Get all comments/discussions from a merge request, including suggestions.
 
     Args:
         project_id: GitLab project ID
         mr_iid: Merge request IID
+        page: Page number for pagination (default: 1)
+        per_page: Number of results per page (default: 20, max: 100)
 
     Returns:
-        Formatted string with all comments, including note_id, discussion_id, and suggestions
+        Formatted string with all comments, including note_id, discussion_id, suggestions, and pagination info
     """
     try:
-        logger.info(f"Getting comments for MR !{mr_iid} from project {project_id}")
-        comments = await _service.get_merge_request_comments(project_id, mr_iid)
+        logger.info(
+            f"Getting comments for MR !{mr_iid} from project {project_id}, page {page}"
+        )
+        result_data = await _service.get_merge_request_comments(
+            project_id, mr_iid, page=page, per_page=per_page
+        )
+
+        comments = result_data["comments"]
+        total = result_data["total"]
+        current_page = result_data["page"]
+        total_pages = result_data["total_pages"]
 
         if not comments:
             return "No comments found."
 
         result = [
             f"Comments in Merge Request !{mr_iid}:\n",
-            f"Total comments: {len(comments)}\n",
+            f"Total comments: {total} (showing page {current_page} of {total_pages})\n",
         ]
 
         for comment in comments:
@@ -504,6 +585,11 @@ async def get_merge_request_comments(project_id: int, mr_iid: int) -> str:
 
                 result.append("")
 
+        if total_pages > 1:
+            result.append(f"\nShowing page {current_page} of {total_pages}")
+            if current_page < total_pages:
+                result.append(f"Use page={current_page + 1} to see next page")
+
         return "\n".join(result)
 
     except Exception as e:
@@ -511,27 +597,40 @@ async def get_merge_request_comments(project_id: int, mr_iid: int) -> str:
         return f"Error getting merge request comments: {str(e)}"
 
 
-async def get_merge_request_commits(project_id: int, mr_iid: int) -> str:
+async def get_merge_request_commits(
+    project_id: int, mr_iid: int, page: int = 1, per_page: int = 20
+) -> str:
     """
     Get commits in a merge request.
 
     Args:
         project_id: GitLab project ID
         mr_iid: Merge request IID
+        page: Page number for pagination (default: 1)
+        per_page: Number of results per page (default: 20, max: 100)
 
     Returns:
-        Formatted string with commit list
+        Formatted string with commit list and pagination info
     """
     try:
-        logger.info(f"Getting commits for MR !{mr_iid} from project {project_id}")
-        commits = await _service.get_merge_request_commits(project_id, mr_iid)
+        logger.info(
+            f"Getting commits for MR !{mr_iid} from project {project_id}, page {page}"
+        )
+        result_data = await _service.get_merge_request_commits(
+            project_id, mr_iid, page=page, per_page=per_page
+        )
+
+        commits = result_data["commits"]
+        total = result_data["total"]
+        current_page = result_data["page"]
+        total_pages = result_data["total_pages"]
 
         if not commits:
             return "No commits found."
 
         result = [
             f"Commits in Merge Request !{mr_iid}:\n",
-            f"Total commits: {len(commits)}\n",
+            f"Total commits: {total} (showing page {current_page} of {total_pages})\n",
         ]
 
         for commit in commits:
@@ -545,6 +644,11 @@ async def get_merge_request_commits(project_id: int, mr_iid: int) -> str:
             if commit["message"] != commit["title"]:
                 result.append(f"  Message: {commit['message']}")
             result.append("")
+
+        if total_pages > 1:
+            result.append(f"\nShowing page {current_page} of {total_pages}")
+            if current_page < total_pages:
+                result.append(f"Use page={current_page + 1} to see next page")
 
         return "\n".join(result)
 
